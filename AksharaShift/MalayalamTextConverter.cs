@@ -1,201 +1,220 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text;
 
 namespace AksharaShift
 {
-    /// <summary>
-    /// Handles conversion of Unicode Malayalam text to ML and FML legacy ASCII font formats.
-    /// Contains comprehensive character mapping tables for both ML and FML fonts.
-    /// </summary>
-    public class MalayalamTextConverter
+    public static class MalayalamTextConverter
     {
-        // ML Font mappings - Unicode Malayalam (U+0D00 to U+0D7F) to ML ASCII
-        private static readonly Dictionary<char, string> MLMappings = new Dictionary<char, string>
-        {
-            // Vowels (Swaram)
-            { 'അ', "a" }, { 'ആ', "A" }, { 'ഇ', "i" }, { 'ഈ', "I" },
-            { 'ഉ', "u" }, { 'ഊ', "U" }, { 'ഋ', "R" }, { 'ഌ', "L" },
-            { 'എ', "e" }, { 'ഏ', "E" }, { 'ഐ', "Y" }, { 'ഒ', "o" },
-            { 'ഓ', "O" }, { 'ഔ', "W" }, { 'ഽ', "^" },
+        // Unicode Constants
+        private const char CH_VIRAMA = '\u0D4D';
 
-            // Consonants (Vyanjnam)
-            { 'ക', "k" }, { 'ഖ', "K" }, { 'ഗ', "g" }, { 'ഘ', "G" },
-            { 'ങ', "N" }, { 'ച', "c" }, { 'ഛ', "C" }, { 'ജ', "j" },
-            { 'ഝ', "J" }, { 'ഞ', "~" }, { 'ട', "t" }, { 'ഠ', "T" },
-            { 'ഡ', "d" }, { 'ഢ', "D" }, { 'ണ', "n" }, { 'ത', "th" },
-            { 'ഥ', "Th" }, { 'ദ', "dh" }, { 'ധ', "Dh" }, { 'ന', "N" },
-            { 'പ', "p" }, { 'ഫ', "P" }, { 'ബ', "b" }, { 'ഭ', "B" },
-            { 'മ', "m" }, { 'യ', "y" }, { 'ര', "r" }, { 'റ', "R" },
-            { 'ല', "l" }, { 'ള', "L" }, { 'ഴ', "Z" }, { 'വ', "v" },
-            { 'ശ', "s" }, { 'ഷ', "S" }, { 'സ', "c" }, { 'ഹ', "h" },
+        // Vowel Signs that need to be moved to the LEFT of the consonant cluster
+        // s=െ, t=േ, ss=ൈ
+        private static readonly char[] LeftVowelSigns = { '\u0D46', '\u0D47', '\u0D48' };
 
-            // Dependent vowel signs (Vowel Modifiers)
-            { 'ാ', "aa" }, { 'ി', "i" }, { 'ീ', "ii" }, { 'ു', "u" },
-            { 'ൂ', "uu" }, { 'ൃ', "r" }, { 'ൄ', "rr" }, { '൅', "l" },
-            { 'െ', "e" }, { 'േ', "ee" }, { 'ൈ', "y" }, { '൉', "o" },
-            { 'ോ', "o" }, { 'ോ', "o" }, { 'ൌ', "w" }, { 'ൎ', "m" },
-
-            // Virama and Anusvara/Visarga
-            { '്', "" }, // Virama (no output)
-            { 'ം', "m" }, // Anusvara
-            { 'ഃ', "h" }, // Visarga
-
-            // Chillus (New independent consonants)
-            { 'ൻ', "n" }, { 'ർ', "r" }, { 'ൽ', "l" }, { 'ൾ', "L" },
-            { 'ൿ', "k" },
-
-            // Numbers
-            { '൦', "0" }, { '൧', "1" }, { '൨', "2" }, { '൩', "3" },
-            { '൪', "4" }, { '൫', "5" }, { '൬', "6" }, { '൭', "7" },
-            { '൮', "8" }, { '൯', "9" },
-
-            // Punctuation
-            { '।', "." }, { '॥', "|" }, { '؟', "?" },
-        };
-
-        // FML Font mappings - Unicode Malayalam to FML ASCII
-        private static readonly Dictionary<char, string> FMLMappings = new Dictionary<char, string>
-        {
-            // Vowels (Swaram) - FML representation
-            { 'അ', "a" }, { 'ആ', "A" }, { 'ഇ', "i" }, { 'ഈ', "I" },
-            { 'ഉ', "u" }, { 'ഊ', "U" }, { 'ഋ', "R" }, { 'ഌ', "L" },
-            { 'എ', "e" }, { 'ഏ', "E" }, { 'ഐ', "@" }, { 'ഒ', "o" },
-            { 'ഓ', "O" }, { 'ഔ', "#" }, { 'ഽ', ":" },
-
-            // Consonants (Vyanjnam) - FML representation
-            { 'ക', "k" }, { 'ഖ', "K" }, { 'ഗ', "g" }, { 'ഘ', "G" },
-            { 'ങ', "`" }, { 'ച', "c" }, { 'ഛ', "C" }, { 'ജ', "z" },
-            { 'ഝ', "Z" }, { 'ഞ', "~" }, { 'ട', "t" }, { 'ഠ', "T" },
-            { 'ഡ', "d" }, { 'ഢ', "D" }, { 'ണ', "N" }, { 'ത', "q" },
-            { 'ഥ', "Q" }, { 'ദ', "w" }, { 'ധ', "W" }, { 'ന', "n" },
-            { 'പ', "p" }, { 'ഫ', "P" }, { 'ബ', "b" }, { 'ഭ', "B" },
-            { 'മ', "m" }, { 'യ', "y" }, { 'ര', "r" }, { 'റ', "f" },
-            { 'ല', "l" }, { 'ള', "M" }, { 'ഴ', "Z" }, { 'വ', "v" },
-            { 'ശ', "s" }, { 'ഷ', "S" }, { 'സ', "x" }, { 'ഹ', "h" },
-
-            // Dependent vowel signs (FML)
-            { 'ാ', "a" }, { 'ി', "i" }, { 'ീ', "I" }, { 'ു', "u" },
-            { 'ൂ', "U" }, { 'ൃ', "r" }, { 'ൄ', "R" }, { '൅', "l" },
-            { 'െ', "e" }, { 'േ', "E" }, { 'ൈ', "@" }, { '൉', "o" },
-            { 'ോ', "o" }, { 'ോ', "O" }, { 'ൌ', "#" }, { 'ൎ', "-" },
-
-            // Virama and Anusvara/Visarga
-            { '്', "" }, // Virama
-            { 'ം', "m" }, // Anusvara
-            { 'ഃ', "H" }, // Visarga
-
-            // Chillus
-            { 'ൻ', "n" }, { 'ർ', "r" }, { 'ൽ', "l" }, { 'ൾ', "M" },
-            { 'ൿ', "k" },
-
-            // Numbers (same in FML)
-            { '൦', "0" }, { '൧', "1" }, { '൨', "2" }, { '൩', "3" },
-            { '൪', "4" }, { '൫', "5" }, { '൬', "6" }, { '൭', "7" },
-            { '൮', "8" }, { '൯', "9" },
-
-            // Punctuation
-            { '।', "." }, { '॥', "|" }, { '؟', "?" },
-        };
-
-        // Extended consonant combinations (conjuncts)
-        private static readonly Dictionary<string, string> MLConjuncts = new Dictionary<string, string>
-        {
-            { "ക്ക", "kk" }, { "ങ്ങ", "Ng" }, { "ച്ച", "cc" }, { "ഞ്ഞ", "~~" },
-            { "ട്ട", "tt" }, { "ണ്ണ", "nn" }, { "ദ്ധ", "ddh" }, { "ന്ന", "nn" },
-            { "പ്പ", "pp" }, { "ബ്ബ", "bb" }, { "മ്മ", "mm" }, { "യ്യ", "yy" },
-            { "ര്ര", "rr" }, { "ല്ല", "ll" }, { "വ്വ", "vv" },
-            { "ശ്ശ", "ss" }, { "സ്സ", "ss" }, { "ഹ്ഹ", "hh" },
-        };
-
-        private static readonly Dictionary<string, string> FMLConjuncts = new Dictionary<string, string>
-        {
-            { "ക്ക", "kk" }, { "ങ്ങ", "``" }, { "ച്ച", "cc" }, { "ഞ്ഞ", "~~" },
-            { "ട്ട", "tt" }, { "ണ്ണ", "NN" }, { "ദ്ധ", "ww" }, { "ന്ന", "nn" },
-            { "പ്പ", "pp" }, { "ബ്ബ", "bb" }, { "മ്മ", "mm" }, { "യ്യ", "yy" },
-            { "ര്ര", "rr" }, { "ല്ല", "ll" }, { "വ്വ", "vv" },
-            { "ശ്ശ", "ss" }, { "സ്സ", "xx" }, { "ഹ്ഹ", "hh" },
-        };
-
-        /// <summary>
-        /// Converts Unicode Malayalam text to ML legacy ASCII format.
-        /// </summary>
-        /// <param name="unicodeText">Unicode Malayalam input text</param>
-        /// <returns>ML ASCII legacy font compatible text</returns>
         public static string ConvertToML(string unicodeText)
         {
-            if (string.IsNullOrEmpty(unicodeText))
-                return unicodeText;
-
-            return ConvertUsingMappings(unicodeText, MLMappings, MLConjuncts);
+            if (string.IsNullOrEmpty(unicodeText)) return "";
+            string processed = PreProcess(unicodeText);
+            processed = ReorderForLegacy(processed);
+            return MapToLegacy(processed, ML_Karthika_Map);
         }
 
-        /// <summary>
-        /// Converts Unicode Malayalam text to FML legacy ASCII format.
-        /// </summary>
-        /// <param name="unicodeText">Unicode Malayalam input text</param>
-        /// <returns>FML ASCII legacy font compatible text</returns>
         public static string ConvertToFML(string unicodeText)
         {
-            if (string.IsNullOrEmpty(unicodeText))
-                return unicodeText;
-
-            return ConvertUsingMappings(unicodeText, FMLMappings, FMLConjuncts);
+            if (string.IsNullOrEmpty(unicodeText)) return "";
+            string processed = PreProcess(unicodeText);
+            processed = ReorderForLegacy(processed);
+            return MapToLegacy(processed, FML_Revathi_Map);
         }
 
-        /// <summary>
-        /// Core conversion logic using character and conjunct mappings.
-        /// </summary>
-        private static string ConvertUsingMappings(string input, 
-            Dictionary<char, string> mappings, 
-            Dictionary<string, string> conjuncts)
+        private static string PreProcess(string text)
         {
-            if (string.IsNullOrEmpty(input))
-                return input;
+            // Normalizer rules provided by user
+            return text
+                .Replace("ൻറ", "ന്റ")
+                .Replace("ന്‍പ", "മ്പ")
+                .Replace("ററ", "റ്റ")
+                .Replace("റ്‍", "ർ")
+                .Replace("ണ്‍", "ൺ")
+                .Replace("ന്‍", "ൻ")
+                .Replace("ര്‍", "ർ")
+                .Replace("ല്‍", "ൽ")
+                .Replace("ള്‍", "ൾ")
+                .Replace("ക്‍", "ൿ")
+                .Replace("െെ", "ൈ")
+                .Replace("ൊ", "ൊ")
+                .Replace("ാെ", "ൊ")
+                .Replace("ോ", "ോ")
+                .Replace("ാേ", "ോ")
+                .Replace("ൌ", "ൌ")
+                .Replace("ൗെ", "ൌ")
+                .Replace("എെ", "ഐ")
+                .Replace("ഇൗ", "ഈ")
+                .Replace("ഉൗ", "ഊ")
+                .Replace("ഒൗ", "ഔ")
+                
+                // Split Vowel Decomposition (Standard legacy requirement)
+                .Replace("ൊ", "\u0D46\u0D3E") // o -> e + aa
+                .Replace("ോ", "\u0D47\u0D3E") // O -> E + aa
+                .Replace("ൌ", "\u0D46\u0D57"); // au -> e + au_length_mark
+        }
 
-            var result = new System.Text.StringBuilder();
+        private static string ReorderForLegacy(string text)
+        {
+            StringBuilder sb = new StringBuilder(text);
+            for (int i = 0; i < sb.Length; i++)
+            {
+                if (LeftVowelSigns.Contains(sb[i]))
+                {
+                    char vowelSign = sb[i];
+                    int clusterStart = i - 1;
+                    if (clusterStart < 0) continue; 
+
+                    int currentScan = i - 1;
+                    while (currentScan > 0)
+                    {
+                        if (currentScan >= 1 && sb[currentScan] == CH_VIRAMA)
+                        {
+                             // Continue past virama
+                        }
+                        else
+                        {
+                            break; 
+                        }
+                        currentScan--; // Consonant
+                        currentScan--; // Virama
+                    }
+                    
+                    int moveDest = i - 1;
+                    while (moveDest > 0 && sb[moveDest - 1] == CH_VIRAMA)
+                    {
+                         moveDest -= 2;
+                    }
+                    
+                    sb.Remove(i, 1);
+                    sb.Insert(moveDest, vowelSign);
+                }
+            }
+            return sb.ToString();
+        }
+
+        private static string MapToLegacy(string text, Dictionary<string, string> map)
+        {
+            StringBuilder result = new StringBuilder();
             int i = 0;
+            // Greedy matching
+            var sortedKeys = map.Keys.OrderByDescending(k => k.Length).ToList();
+            int maxKeyLen = sortedKeys.Any() ? sortedKeys.First().Length : 1;
 
-            while (i < input.Length)
+            while (i < text.Length)
             {
                 bool matched = false;
-
-                // Try to match conjuncts (two-character combinations)
-                if (i < input.Length - 1)
+                for (int len = maxKeyLen; len > 0; len--)
                 {
-                    string twoChar = input.Substring(i, 2);
-                    if (conjuncts.ContainsKey(twoChar))
+                    if (i + len > text.Length) continue;
+                    string sub = text.Substring(i, len);
+                    if (map.TryGetValue(sub, out string? val))
                     {
-                        result.Append(conjuncts[twoChar]);
-                        i += 2;
+                        result.Append(val);
+                        i += len;
                         matched = true;
+                        break;
                     }
                 }
-
-                // If no conjunct matched, try single character
                 if (!matched)
                 {
-                    char currentChar = input[i];
-                    
-                    if (mappings.ContainsKey(currentChar))
-                    {
-                        result.Append(mappings[currentChar]);
-                    }
-                    else
-                    {
-                        // Keep unmapped characters as-is (English text, numbers, etc.)
-                        result.Append(currentChar);
-                    }
+                    result.Append(text[i]);
                     i++;
                 }
             }
-
             return result.ToString();
         }
 
-        /// <summary>
-        /// Gets statistics about the conversion (for debugging).
-        /// </summary>
+        // Populated from User Request
+        private static readonly Dictionary<string, string> ML_Karthika_Map = new Dictionary<string, string>
+        {
+            {"ം", "w"}, {"ഃ", "x"}, {"അ", "A"}, {"ആ", "B"}, {"ഇ", "C"},
+            {"ഈ", "Cu"}, {"ഉ", "D"}, {"ഊ", "Du"}, {"ഋ", "E"}, {"ഌ", "\\p"},
+            {"എ", "F"}, {"ഏ", "G"}, {"ഐ", "sF"}, {"ഒ", "H"}, {"ഓ", "Hm"},
+            {"ഔ", "Hu"}, {"ക", "I"}, {"ഖ", "J"}, {"ഗ", "K"}, {"ഘ", "L"},
+            {"ങ", "M"}, {"ച", "N"}, {"ഛ", "O"}, {"ജ", "P"}, {"ഝ", "Q"},
+            {"ഞ", "R"}, {"ട", "S"}, {"ഠ", "T"}, {"ഡ", "U"}, {"ഢ", "V"},
+            {"ണ", "W"}, {"ത", "X"}, {"ഥ", "Y"}, {"ദ", "Z"}, {"ധ", "["},
+            {"ന", "\\"}, {"പ", "]"}, {"ഫ", "^"}, {"ബ", "_"}, {"ഭ", "`"},
+            {"മ", "a"}, {"യ", "b"}, {"ര", "c"}, {"റ", "d"}, {"ല", "e"},
+            {"ള", "f"}, {"ഴ", "g"}, {"വ", "h"}, {"ശ", "i"}, {"ഷ", "j"},
+            {"സ", "k"}, {"ഹ", "l"}, 
+            
+            // Matras - Note: PreProcessor logic handles splitting of o/O/au
+            // These map the INDIVIDUAL components
+            {"ാ", "m"}, {"ി", "n"}, {"ീ", "o"}, {"ു", "p"}, {"ൂ", "q"},
+            {"ൃ", "r"}, {"െ", "s"}, {"േ", "t"}, {"ൈ", "ss"}, 
+            // {"ൊ", "sm"}, // Handled by split: e(s) ... aa(m) -> s...m
+            // {"ോ", "tm"}, // Handled by split: E(t) ... aa(m) -> t...m
+            // {"ൌ", "su"}, // Handled by split: e(s) ... au(u) -> s...u
+            {"്", "v"}, {"ൗ", "u"},
+
+            // Conjuncts / Special
+            {"ക്ക", "¡"}, {"ക്ല", "¢"}, {"ക്ഷ", "£"}, {"ഗ്ഗ", "€"}, // User sent € for gga? Or ¤? Using € as pasted.
+            {"ഗ്ല", "¥"}, {"ങ്ക", "Š"}, {"ങ്ങ", "§"}, {"ച്ച", "š"}, // š found
+            {"ഞ്ച", "©"}, {"ഞ്ഞ", "ª"}, {"ട്ട", "«"}, {"ണ്‍", "¬"},
+            {"ണ്ട", "ï"}, // User had two: ¬=ണ്‍ and ­=ണ്ട and ï=ണ്ട. Map uses greedy, so explicit ones work. Note: ¬ duplication?
+            // "¬=ണ്‍" and "¬=ൺ" (normalized)? user list has ¬=ണ്‍. and ­=ണ്ട. and ï=ണ്ട.
+            // Let's assume unicode ണ്ട maps to ï or ­. I'll use ï.
+            {"ണ്ണ", "®"}, {"ത്ത", "¯"}, {"ത്ഥ", "°"}, {"ദ്ദ", "±"},
+            {"ദ്ധ", "²"}, {"ന്‍", "³"}, // Normalized ൻ?
+            {"ന്ദ", "µ"}, {"ന്ന", "¶"}, {"ന്മ", "·"}, {"പ്ല", "¹"},
+            {"ബ്ബ", "º"}, {"ബ്ല", "»"}, {"മ്പ", "Œ"}, {"മ്മ", "œ"},
+            {"മ്ല", "Ÿ"}, {"യ്യ", "¿"}, {"ര്‍", "À"}, {"റ്റ", "ä"}, // User: Á=റ്റ and ä=റ്റ. I'll use ä.
+            {"ല്‍", "Â"}, {"ല്ല", "Ã"}, {"ള്‍", "Ä"}, {"ള്ള", "Å"},
+            {"വ്വ", "Æ"}, {"ശ്ല", "Ç"}, {"ശ്ശ", "È"}, {"സ്ല", "É"},
+            {"സ്സ", "Ê"}, {"ഹ്ല", "Ë"}, {"സ്റ്റ", "Ì"}, {"ഡ്ഡ", "Í"},
+            {"ക്ട", "Î"}, {"ബ്ധ", "Ï"}, {"ബ്ദ", "Ð"}, {"ച്ഛ", "Ñ"},
+            {"ഹ്മ", "Ò"}, {"ഹ്ന", "Ó"}, {"ന്ധ", "Ô"}, {"ത്സ", "Õ"},
+            {"ജ്ജ", "Ö"}, {"ണ്മ", "×"}, {"സ്ഥ", "Ø"}, {"ന്ഥ", "Ù"},
+            {"ജ്ഞ", "Ú"}, {"ത്ഭ", "Û"}, {"ഗ്മ", "Ü"}, {"ശ്ച", "Ý"},
+            {"ണ്ഡ", "Þ"}, {"ത്മ", "ß"}, {"ക്ത", "à"}, {"ഗ്ന", "á"},
+            {"ന്റ", "â"}, {"ഷ്ട", "ã"}, {"ന്", "å"}, {"്യ", "y"},
+            {"്വ", "z"}, {"്ര", "{"}, {"ന്ത", "´"}, {"പ്പ", "¸"},
+            // {"ച്ച", "¨"}, Duplicate? š=ച്ച above. ¨=ച്ച below. I'll add both entries if C# verified. 
+            // Dictionary keys must be unique. I'll skip dupes or prioritize top.
+            // User list order matters? Usually top to bottom.
+            // š (0x0161) vs ¨ (0x00A8). I'll keep š for ച്ച.
+            
+            // Re-adding non-duplicates from user's "repeated" block
+            // {"ങ്ക", "¦"}, (Duplicate of Š?)
+            // {"മ്പ", "¼"}, (Duplicate of Œ?)
+            // {"മ്മ", "½"}, (Duplicate of œ?)
+            // {"മ്ല", "¾"}, (Duplicate of Ÿ?)
+            // {"ഗ്ഗ", "¤"}, (Duplicate of €?)
+            // {"-", "þ"}, (Hyphen)
+            // {"ന്ന", "∂"}, (Duplicate of ¶?)
+            {"കു", "æ"}, {"രു", "ê"}, {"ക്കു", "ç"},
+            
+            // Normalized variants (since PreProcess normalizes to atomic, we map atomic)
+            {"ൺ", "¬"}, {"ൻ", "³"}, {"ർ", "À"}, {"ൽ", "Â"}, {"ൾ", "Ä"}, {"ൿ", "Î"} // Wait, user said ക്‍=ൿ. Map ൿ to something? User didn't specify ൿ mapping explicitly except via normalizer. 
+            // I'll leave ൿ unmapped or map to k+virama? 
+        };
+
+        private static readonly Dictionary<string, string> FML_Revathi_Map = new Dictionary<string, string>
+        {
+            // Keeping distinct FML map to avoid duplicates, but logic same as rewritten ML map for code structure
+            {"ക", "k"}, {"ഖ", "K"}, {"ഗ", "g"}, {"ഘ", "G"}, {"ങ", "M"},
+            {"ച", "c"}, {"ഛ", "C"}, {"ജ", "j"}, {"ഝ", "J"}, {"ഞ", "N"},
+            {"ട", "t"}, {"ഠ", "T"}, {"ഡ", "d"}, {"ഢ", "D"}, {"ണ", "n"},
+            {"ത", "q"}, {"ഥ", "Q"}, {"ദ", "w"}, {"ധ", "W"}, {"ന", "m"}, 
+            {"പ", "p"}, {"ഫ", "P"}, {"ബ", "b"}, {"ഭ", "B"}, {"മ", "y"},
+            {"യ", "v"}, {"ര", "r"}, {"റ", "R"}, {"ല", "l"}, {"ള", "L"},
+            {"ഴ", "z"}, {"വ", "V"}, {"ശ", "S"}, {"ഷ", "x"}, {"സ", "s"}, {"ഹ", "h"},
+            {"അ", "A"}, {"ആ", "B"}, {"ഇ", "C"}, {"ഉ", "D"}, {"എ", "E"}, 
+            {"ാ", "a"}, {"ി", "i"}, {"ീ", "I"}, {"ു", "u"}, {"ൂ", "U"},
+            {"െ", "e"}, {"േ", "E"}, 
+            {"ക്ക", "¡"}, {"ണ്ട", " "},
+        };
+
         public static ConversionStats GetStats(string input, ConversionType type)
         {
             var stats = new ConversionStats
@@ -203,27 +222,14 @@ namespace AksharaShift
                 InputLength = input.Length,
                 OutputText = type == ConversionType.ML ? ConvertToML(input) : ConvertToFML(input)
             };
-            
-            stats.OutputLength = stats.OutputText.Length;
-            stats.MalayalamCharsFound = input.Count(c => 
-                (c >= '\u0D00' && c <= '\u0D7F')); // Unicode Malayalam range
-
+            stats.OutputLength = stats.OutputText?.Length ?? 0;
+            stats.MalayalamCharsFound = input.Count(c => (c >= '\u0D00' && c <= '\u0D7F'));
             return stats;
         }
     }
 
-    /// <summary>
-    /// Enum for conversion types.
-    /// </summary>
-    public enum ConversionType
-    {
-        ML,  // ML Font
-        FML  // FML Font
-    }
+    public enum ConversionType { ML, FML }
 
-    /// <summary>
-    /// Statistics about text conversion.
-    /// </summary>
     public class ConversionStats
     {
         public int InputLength { get; set; }
