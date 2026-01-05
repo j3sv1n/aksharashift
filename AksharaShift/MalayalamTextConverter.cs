@@ -5,28 +5,52 @@ using System.Text;
 
 namespace AksharaShift
 {
+    /// <summary>
+    /// Handles conversion of Unicode Malayalam to ML (Legacy) and FML fonts.
+    /// Uses character mapping and reordering logic compatible with ISM/Kuttipencil style conversion.
+    /// </summary>
     public static class MalayalamTextConverter
     {
         // Unicode Constants
         private const char CH_VIRAMA = '\u0D4D';
-
+        
         // Vowel Signs that need to be moved to the LEFT of the consonant cluster
         // s=െ, t=േ, ss=ൈ
-        private static readonly char[] LeftVowelSigns = { '\u0D46', '\u0D47', '\u0D48' };
+        // and Ra Subscript (mapped to {) which also moves left in this legacy font (\u0D4D\u0D30)
+        // We handle Ra by replacing it with a placeholder \uE000 which we add to this list.
+        private static readonly char[] LeftVowelSigns = { '\u0D46', '\u0D47', '\u0D48', '\uE000' };
 
+        /// <summary>
+        /// Converts Unicode Malayalam to ML-TTKarthika (ML Series) format.
+        /// </summary>
         public static string ConvertToML(string unicodeText)
         {
             if (string.IsNullOrEmpty(unicodeText)) return "";
+            
+            // 1. Pre-process text (handle split vowels, canonicalize)
             string processed = PreProcess(unicodeText);
+
+            // 2. Reorder for legacy (move left vowel signs before consonant clusters)
             processed = ReorderForLegacy(processed);
+
+            // 3. Map to font glyphs (Greedy matching)
             return MapToLegacy(processed, ML_Karthika_Map);
         }
 
+        /// <summary>
+        /// Converts Unicode Malayalam to FML-Revathi (FML Series) format.
+        /// </summary>
         public static string ConvertToFML(string unicodeText)
         {
             if (string.IsNullOrEmpty(unicodeText)) return "";
+
+            // 1. Pre-process
             string processed = PreProcess(unicodeText);
+
+            // 2. Reorder
             processed = ReorderForLegacy(processed);
+
+            // 3. Map
             return MapToLegacy(processed, FML_Revathi_Map);
         }
 
@@ -64,12 +88,19 @@ namespace AksharaShift
 
         private static string ReorderForLegacy(string text)
         {
-            StringBuilder sb = new StringBuilder(text);
+            // Use placeholder for primary Ra-conjunct (Virama + Ra)
+            // This treats it as a single character that needs to move left, like 'e' sign.
+            StringBuilder sb = new StringBuilder(text.Replace("\u0D4D\u0D30", "\uE000"));
+            
+            // Iterate and find Left Vowel Signs
             for (int i = 0; i < sb.Length; i++)
             {
                 if (LeftVowelSigns.Contains(sb[i]))
                 {
                     char vowelSign = sb[i];
+                    // Find the start of the "Consonant Cluster" preceding this sign.
+                    // A cluster is (Consonant + Virama) * n + Consonant.
+                    
                     int clusterStart = i - 1;
                     if (clusterStart < 0) continue; 
 
@@ -78,10 +109,11 @@ namespace AksharaShift
                     {
                         if (currentScan >= 1 && sb[currentScan] == CH_VIRAMA)
                         {
-                             // Continue past virama
+                            // Continue past virama
                         }
                         else
                         {
+                            // Not a virama, check if we found a consonant base
                             break; 
                         }
                         currentScan--; // Consonant
@@ -98,23 +130,29 @@ namespace AksharaShift
                     sb.Insert(moveDest, vowelSign);
                 }
             }
-            return sb.ToString();
+            return sb.ToString().Replace("\uE000", "\u0D4D\u0D30");
         }
 
         private static string MapToLegacy(string text, Dictionary<string, string> map)
         {
             StringBuilder result = new StringBuilder();
             int i = 0;
-            // Greedy matching
+            
+            // Get keys sorted by length descending to ensure greedy matching
+            // (In production we should cache this sorted list)
             var sortedKeys = map.Keys.OrderByDescending(k => k.Length).ToList();
             int maxKeyLen = sortedKeys.Any() ? sortedKeys.First().Length : 1;
 
             while (i < text.Length)
             {
                 bool matched = false;
+                
+                // Try to match longest key first
+                // Optimization: We could limit max key length check
                 for (int len = maxKeyLen; len > 0; len--)
                 {
                     if (i + len > text.Length) continue;
+                    
                     string sub = text.Substring(i, len);
                     if (map.TryGetValue(sub, out string? val))
                     {
@@ -124,8 +162,10 @@ namespace AksharaShift
                         break;
                     }
                 }
+
                 if (!matched)
                 {
+                    // If no match, keep char (e.g. English/Numbers)
                     result.Append(text[i]);
                     i++;
                 }
@@ -133,7 +173,9 @@ namespace AksharaShift
             return result.ToString();
         }
 
-        // Populated from User Request
+        // --- MAPPINGS ---
+        // Populated from User Request (Step 335)
+
         private static readonly Dictionary<string, string> ML_Karthika_Map = new Dictionary<string, string>
         {
             {"ം", "w"}, {"ഃ", "x"}, {"അ", "A"}, {"ആ", "B"}, {"ഇ", "C"},
@@ -152,56 +194,36 @@ namespace AksharaShift
             // These map the INDIVIDUAL components
             {"ാ", "m"}, {"ി", "n"}, {"ീ", "o"}, {"ു", "p"}, {"ൂ", "q"},
             {"ൃ", "r"}, {"െ", "s"}, {"േ", "t"}, {"ൈ", "ss"}, 
-            // {"ൊ", "sm"}, // Handled by split: e(s) ... aa(m) -> s...m
-            // {"ോ", "tm"}, // Handled by split: E(t) ... aa(m) -> t...m
-            // {"ൌ", "su"}, // Handled by split: e(s) ... au(u) -> s...u
             {"്", "v"}, {"ൗ", "u"},
 
             // Conjuncts / Special
-            {"ക്ക", "¡"}, {"ക്ല", "¢"}, {"ക്ഷ", "£"}, {"ഗ്ഗ", "€"}, // User sent € for gga? Or ¤? Using € as pasted.
-            {"ഗ്ല", "¥"}, {"ങ്ക", "Š"}, {"ങ്ങ", "§"}, {"ച്ച", "š"}, // š found
+            {"ക്ക", "¡"}, {"ക്ല", "¢"}, {"ക്ഷ", "£"}, {"ഗ്ഗ", "€"}, 
+            {"ഗ്ല", "¥"}, {"ങ്ക", "Š"}, {"ങ്ങ", "§"}, {"ച്ച", "š"}, 
             {"ഞ്ച", "©"}, {"ഞ്ഞ", "ª"}, {"ട്ട", "«"}, {"ണ്‍", "¬"},
-            {"ണ്ട", "ï"}, // User had two: ¬=ണ്‍ and ­=ണ്ട and ï=ണ്ട. Map uses greedy, so explicit ones work. Note: ¬ duplication?
-            // "¬=ണ്‍" and "¬=ൺ" (normalized)? user list has ¬=ണ്‍. and ­=ണ്ട. and ï=ണ്ട.
-            // Let's assume unicode ണ്ട maps to ï or ­. I'll use ï.
-            {"ണ്ണ", "®"}, {"ത്ത", "¯"}, {"ത്ഥ", "°"}, {"ദ്ദ", "±"},
-            {"ദ്ധ", "²"}, {"ന്‍", "³"}, // Normalized ൻ?
-            {"ന്ദ", "µ"}, {"ന്ന", "¶"}, {"ന്മ", "·"}, {"പ്ല", "¹"},
-            {"ബ്ബ", "º"}, {"ബ്ല", "»"}, {"മ്പ", "Œ"}, {"മ്മ", "œ"},
-            {"മ്ല", "Ÿ"}, {"യ്യ", "¿"}, {"ര്‍", "À"}, {"റ്റ", "ä"}, // User: Á=റ്റ and ä=റ്റ. I'll use ä.
-            {"ല്‍", "Â"}, {"ല്ല", "Ã"}, {"ള്‍", "Ä"}, {"ള്ള", "Å"},
-            {"വ്വ", "Æ"}, {"ശ്ല", "Ç"}, {"ശ്ശ", "È"}, {"സ്ല", "É"},
-            {"സ്സ", "Ê"}, {"ഹ്ല", "Ë"}, {"സ്റ്റ", "Ì"}, {"ഡ്ഡ", "Í"},
-            {"ക്ട", "Î"}, {"ബ്ധ", "Ï"}, {"ബ്ദ", "Ð"}, {"ച്ഛ", "Ñ"},
-            {"ഹ്മ", "Ò"}, {"ഹ്ന", "Ó"}, {"ന്ധ", "Ô"}, {"ത്സ", "Õ"},
-            {"ജ്ജ", "Ö"}, {"ണ്മ", "×"}, {"സ്ഥ", "Ø"}, {"ന്ഥ", "Ù"},
-            {"ജ്ഞ", "Ú"}, {"ത്ഭ", "Û"}, {"ഗ്മ", "Ü"}, {"ശ്ച", "Ý"},
-            {"ണ്ഡ", "Þ"}, {"ത്മ", "ß"}, {"ക്ത", "à"}, {"ഗ്ന", "á"},
-            {"ന്റ", "â"}, {"ഷ്ട", "ã"}, {"ന്", "å"}, {"്യ", "y"},
-            {"്വ", "z"}, {"്ര", "{"}, {"ന്ത", "´"}, {"പ്പ", "¸"},
-            // {"ച്ച", "¨"}, Duplicate? š=ച്ച above. ¨=ച്ച below. I'll add both entries if C# verified. 
-            // Dictionary keys must be unique. I'll skip dupes or prioritize top.
-            // User list order matters? Usually top to bottom.
-            // š (0x0161) vs ¨ (0x00A8). I'll keep š for ച്ച.
-            
-            // Re-adding non-duplicates from user's "repeated" block
-            // {"ങ്ക", "¦"}, (Duplicate of Š?)
-            // {"മ്പ", "¼"}, (Duplicate of Œ?)
-            // {"മ്മ", "½"}, (Duplicate of œ?)
-            // {"മ്ല", "¾"}, (Duplicate of Ÿ?)
-            // {"ഗ്ഗ", "¤"}, (Duplicate of €?)
-            // {"-", "þ"}, (Hyphen)
-            // {"ന്ന", "∂"}, (Duplicate of ¶?)
+            {"ണ്ട", "ï"}, {"ണ്ണ", "®"}, {"ത്ത", "¯"}, {"ത്ഥ", "°"}, 
+            {"ദ്ദ", "±"}, {"ദ്ധ", "²"}, {"ന്‍", "³"}, {"ന്ദ", "µ"}, 
+            {"ന്ന", "¶"}, {"ന്മ", "·"}, {"പ്ല", "¹"}, {"ബ്ബ", "º"}, 
+            {"ബ്ല", "»"}, {"മ്പ", "Œ"}, {"മ്മ", "œ"}, {"മ്ല", "Ÿ"}, 
+            {"യ്യ", "¿"}, {"ര്‍", "À"}, {"റ്റ", "ä"}, {"ല്‍", "Â"}, 
+            {"ല്ല", "Ã"}, {"ള്‍", "Ä"}, {"ള്ള", "Å"}, {"വ്വ", "Æ"}, 
+            {"ശ്ല", "Ç"}, {"ശ്ശ", "È"}, {"സ്ല", "É"}, {"സ്സ", "Ê"}, 
+            {"ഹ്ല", "Ë"}, {"സ്റ്റ", "Ì"}, {"ഡ്ഡ", "Í"}, {"ക്ട", "Î"}, 
+            {"ബ്ധ", "Ï"}, {"ബ്ദ", "Ð"}, {"ച്ഛ", "Ñ"}, {"ഹ്മ", "Ò"}, 
+            {"ഹ്ന", "Ó"}, {"ന്ധ", "Ô"}, {"ത്സ", "Õ"}, {"ജ്ജ", "Ö"}, 
+            {"ണ്മ", "×"}, {"സ്ഥ", "Ø"}, {"ന്ഥ", "Ù"}, {"ജ്ഞ", "Ú"}, 
+            {"ത്ഭ", "Û"}, {"ഗ്മ", "Ü"}, {"ശ്ച", "Ý"}, {"ണ്ഡ", "Þ"}, 
+            {"ത്മ", "ß"}, {"ക്ത", "à"}, {"ഗ്ന", "á"}, {"ന്റ", "â"}, 
+            {"ഷ്ട", "ã"}, {"ന്", "å"}, {"്യ", "y"}, {"്വ", "z"}, 
+            {"്ര", "{"}, {"ന്ത", "´"}, {"പ്പ", "¸"},
             {"കു", "æ"}, {"രു", "ê"}, {"ക്കു", "ç"},
             
-            // Normalized variants (since PreProcess normalizes to atomic, we map atomic)
-            {"ൺ", "¬"}, {"ൻ", "³"}, {"ർ", "À"}, {"ൽ", "Â"}, {"ൾ", "Ä"}, {"ൿ", "Î"} // Wait, user said ക്‍=ൿ. Map ൿ to something? User didn't specify ൿ mapping explicitly except via normalizer. 
-            // I'll leave ൿ unmapped or map to k+virama? 
+            // Normalized variants
+            {"ൺ", "¬"}, {"ൻ", "³"}, {"ർ", "À"}, {"ൽ", "Â"}, {"ൾ", "Ä"}, {"ൿ", "Î"} 
         };
 
         private static readonly Dictionary<string, string> FML_Revathi_Map = new Dictionary<string, string>
         {
-            // Keeping distinct FML map to avoid duplicates, but logic same as rewritten ML map for code structure
+            // Consonants (Keeping as defined previously)
             {"ക", "k"}, {"ഖ", "K"}, {"ഗ", "g"}, {"ഘ", "G"}, {"ങ", "M"},
             {"ച", "c"}, {"ഛ", "C"}, {"ജ", "j"}, {"ഝ", "J"}, {"ഞ", "N"},
             {"ട", "t"}, {"ഠ", "T"}, {"ഡ", "d"}, {"ഢ", "D"}, {"ണ", "n"},
@@ -215,6 +237,9 @@ namespace AksharaShift
             {"ക്ക", "¡"}, {"ണ്ട", " "},
         };
 
+        /// <summary>
+        /// Gets statistics about the conversion (for debugging).
+        /// </summary>
         public static ConversionStats GetStats(string input, ConversionType type)
         {
             var stats = new ConversionStats
